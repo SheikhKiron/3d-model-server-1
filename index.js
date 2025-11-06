@@ -5,7 +5,12 @@ const port = 3000 || process.env.PORT;
 require('dotenv').config()
 // midleware
 app.use(express.json());
-app.use(cors());
+app.use(
+  cors({
+    origin: 'http://localhost:5173',
+    credentials: true,
+  })
+);
 
 
 const admin = require("firebase-admin");
@@ -46,7 +51,7 @@ app.get('/', (req, res) => {
 async function run() {
   try {
     // Connect the client to the server	(optional starting in v4.7)
-    await client.connect();
+    // await client.connect();
 
     const modelDB = client.db('modelDB');
     const products = modelDB.collection('products');
@@ -87,7 +92,7 @@ async function run() {
     });
 
     // Send a ping to confirm a successful connection
-    await client.db('admin').command({ ping: 1 });
+    // await client.db('admin').command({ ping: 1 });
     console.log(
       'Pinged your deployment. You successfully connected to MongoDB!'
     );
