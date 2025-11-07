@@ -6,10 +6,7 @@ require('dotenv').config()
 // midleware
 app.use(express.json());
 app.use(
-  cors({
-    origin: 'http://localhost:5173',
-    credentials: true,
-  })
+  cors()
 );
 
 
@@ -21,14 +18,25 @@ admin.initializeApp({
   credential: admin.credential.cert(serviceAccount)
 });
 
-const verifyToken = (req, res, next) => { 
+const verifyToken = async(req, res, next) => { 
   console.log('I am from middleware');
   const authorization = req.headers.authorization
+  if (!authorization) {
+    return res.status(401).send({
+      message: 'unauthorised access',
+    });
+  }
   const token = authorization.split(' ')[1]
   console.log(token);
-
-    
+  try {
+    await admin.auth().verifyIdToken(token)
     next();
+   }
+  catch(error) {
+    res.status(401).send({
+      message:'unauthorised access'
+    })
+  }
 
 
 }
@@ -55,34 +63,54 @@ async function run() {
 
     const modelDB = client.db('modelDB');
     const products = modelDB.collection('products');
-
+    const download=modelDB.collection('download')
     app.get('/products', async (req, res) => {
       const cursor = products.find();
       const result = await cursor.toArray();
       res.send(result);
     });
 
-    app.get('/products/:id',verifyToken, async (req, res) => {
+    app.get('/products/:id', verifyToken, async (req, res) => {
       const id = req.params.id;
       const query = { _id: new ObjectId(id) };
       const result = await products.findOne(query);
       res.send(result);
     });
 
-    app.post('/products',verifyToken, async (req, res) => {
+    app.post('/products', async (req, res) => {
       const addProduct = req.body;
       const result = await products.insertOne(addProduct);
       res.send(result);
     });
 
-    app.delete('/products/:id',verifyToken, async (req, res) => {
+
+    app.post('/downloads/:id', async (req, res) => {
+      const id=req.params.id
+      const data = req.body;
+      const result = await download.insertOne(data)
+      const filter = { _id: new ObjectId(id) }
+      const update = {
+        $inc: {
+          downloads:1
+        }
+      }
+      const downloadCount=await products.updateOne(filter,update)
+      res.send({result,downloadCount})
+    })
+      app.get('/downloads', async (req, res) => {
+        const email = req.query.email;
+        const result = await download.find({ downloaded_by: email }).toArray();
+        res.send(result);
+      });
+
+    app.delete('/products/:id', async (req, res) => {
       const id = req.params.id;
       const query = { _id: new ObjectId(id) };
       const result = await products.deleteOne(query);
       res.send(result);
     });
 
-    app.patch('/products/:id',verifyToken, async (req, res) => {
+    app.patch('/products/:id', async (req, res) => {
       const id = req.params.id;
       const query = { _id: new ObjectId(id) };
       const update = { $set: req.body };
@@ -90,6 +118,18 @@ async function run() {
       const result = await products.updateOne(query, update, options);
       res.send(result);
     });
+
+    app.get('/my-model', async (req, res) => {
+      const email=req.query.email
+      const result = await products.find({ created_by: email }).toArray()
+      res.send(result)
+    })
+
+    app.get('/search', async(req, res) => {
+      const search = req.query.search;
+      const result = await products.find({ name: {$regex:search, $options:'i'} }).toArray()
+      res.send(result)
+    })
 
     // Send a ping to confirm a successful connection
     // await client.db('admin').command({ ping: 1 });
